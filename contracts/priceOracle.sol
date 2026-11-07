@@ -3,7 +3,9 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract priceOracle is Ownable{
+contract PriceOracle is Ownable{
+
+     constructor() Ownable(msg.sender) {}
 
   mapping (address => uint256) prices;
   event PriceUpdated(address indexed token , uint256 price);
@@ -20,7 +22,7 @@ contract priceOracle is Ownable{
 
 
    function getPrice (address token) external view returns (uint256) {
-     require(prices[token] > 0,"Fiyat henüz belirlenmemis");
+     require(prices[token] > 0,"Fiyat mevcut degil!");
      return prices[token];
 
    }
