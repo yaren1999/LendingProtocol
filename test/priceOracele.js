@@ -38,7 +38,7 @@ describe("priceOracleTestleri", async function () {
                 priceOracle.connect(stranger).setPrice(mockA.target,
                      ethers.parseEther("100")
                 )
-            ).to.be.revertedWith;
+            ).to.be.revertedWithCustomError(priceOracle, "OwnableUnauthorizedAccount");
         });
 
         it("Fiyat sifir ise engellenmeli", async function () {
