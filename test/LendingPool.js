@@ -205,4 +205,59 @@ describe("LendingPool Testleri", function () {
             expect(after - before).to.equal(borrowAmount);
         });
     });
+
+        describe("repay Testleri", function () {
+
+        beforeEach(async function () {
+            await mockB.mint(user.address, ethers.parseEther("1000"));
+            await mockB.connect(user).approve(lendingPool.target, ethers.MaxUint256);
+            await lendingPool.connect(user).depositCollateral(mockB.target, ethers.parseEther("1000"));
+
+            await priceOracle.setPrice(mockB.target, 1);
+
+            await mockA.mint(lendingPool.target, ethers.parseEther("10000"));
+            await lendingPool.connect(user).borrow(mockB.target, mockA.target, ethers.parseEther("500"));
+
+            await mockA.mint(user.address, ethers.parseEther("100"));
+            await mockA.connect(user).approve(lendingPool.target, ethers.MaxUint256);
+
+            await interestRateModel.setInterestRate(5);
+        });
+
+        it("Borcu olmayan kullanici repay yapamamali", async function () {
+            await expect(
+                lendingPool.connect(stranger).repay(mockA.target)
+            ).to.be.revertedWith("Borc bulunmuyor");
+        });
+
+        it("Repay sonrasi debt sifirlanmali", async function () {
+            await lendingPool.connect(user).repay(mockA.target);
+
+            expect(await lendingPool.debt(user.address, mockA.target)).to.equal(0);
+        });
+
+        it("Repay sonrasi token pool'a geri donmeli (en az anapara kadar)", async function () {
+            const before = await mockA.balanceOf(lendingPool.target);
+
+            await lendingPool.connect(user).repay(mockA.target);
+
+            const after = await mockA.balanceOf(lendingPool.target);
+            expect(after).to.be.above(before);
+        });
+
+        it("Zaman gectikce odenecek miktar artmali (faiz isliyor)", async function () {
+            await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 30]); 
+            await ethers.provider.send("evm_mine");
+
+            const beforeBalance = await mockA.balanceOf(user.address);
+
+            await lendingPool.connect(user).repay(mockA.target);
+
+            const afterBalance = await mockA.balanceOf(user.address);
+            const paid = beforeBalance - afterBalance;
+
+            
+            expect(paid).to.be.above(ethers.parseEther("500"));
+        });
+    });
 });
