@@ -32,7 +32,7 @@ describe("LendingPool Testleri", function () {
             interestRateModel.target
         );
 
-        // user'a token ver, lendingPool'a approve ver
+       
         await mockA.mint(user.address, ethers.parseEther("1000"));
         await mockA.connect(user).approve(lendingPool.target, ethers.MaxUint256);
     });
@@ -110,6 +110,99 @@ describe("LendingPool Testleri", function () {
 
             const after = await mockA.balanceOf(user.address);
             expect(after - before).to.equal(amount);
+        });
+    });
+
+        describe("depositCollateral Testleri", function () {
+
+        it("Desteklenmeyen token ile teminat yatirilamamali", async function () {
+            await expect(
+                lendingPool.connect(user).depositCollateral(stranger.address, ethers.parseEther("100"))
+            ).to.be.revertedWith("Desteklenmeyen token");
+        });
+
+        it("Miktar sifir ise revert etmeli", async function () {
+            await expect(
+                lendingPool.connect(user).depositCollateral(mockB.target, 0)
+            ).to.be.revertedWith("Miktar sifir olamaz");
+        });
+
+        it("Dogru miktar teminat olarak kaydedilmeli", async function () {
+            const amount = ethers.parseEther("100");
+
+            await mockB.mint(user.address, amount);
+            await mockB.connect(user).approve(lendingPool.target, ethers.MaxUint256);
+
+            await lendingPool.connect(user).depositCollateral(mockB.target, amount);
+
+            expect(await lendingPool.collateral(user.address, mockB.target)).to.equal(amount);
+        });
+
+        it("Token bakiyesi kullanicinin cuzdanindan cikmali", async function () {
+            const amount = ethers.parseEther("100");
+
+            await mockB.mint(user.address, amount);
+            await mockB.connect(user).approve(lendingPool.target, ethers.MaxUint256);
+
+            const before = await mockB.balanceOf(user.address);
+            await lendingPool.connect(user).depositCollateral(mockB.target, amount);
+            const after = await mockB.balanceOf(user.address);
+
+            expect(before - after).to.equal(amount);
+        });
+    });
+
+    describe("borrow Testleri", function () {
+
+        beforeEach(async function () {
+            await mockB.mint(user.address, ethers.parseEther("1000"));
+            await mockB.connect(user).approve(lendingPool.target, ethers.MaxUint256);
+            await lendingPool.connect(user).depositCollateral(mockB.target, ethers.parseEther("1000"));
+
+            await priceOracle.setPrice(mockB.target, 1); 
+            await mockA.mint(lendingPool.target, ethers.parseEther("10000"));
+        });
+
+        it("Desteklenmeyen teminat tokeni ile borc alinamamali", async function () {
+            await expect(
+                lendingPool.connect(user).borrow(stranger.address, mockA.target, ethers.parseEther("10"))
+            ).to.be.revertedWith("Desteklenmeyen teminat tokeni");
+        });
+
+        it("Desteklenmeyen borc tokeni ile borc alinamamali", async function () {
+            await expect(
+                lendingPool.connect(user).borrow(mockB.target, stranger.address, ethers.parseEther("10"))
+            ).to.be.revertedWith("Desteklenmeyen borc tokeni");
+        });
+
+        it("Miktar sifir ise revert etmeli", async function () {
+            await expect(
+                lendingPool.connect(user).borrow(mockB.target, mockA.target, 0)
+            ).to.be.revertedWith("Miktar sifir olamaz");
+        });
+
+        it("LTV sinirini asan borc talebi revert etmeli", async function () {
+            await expect(
+                lendingPool.connect(user).borrow(mockB.target, mockA.target, ethers.parseEther("800"))
+            ).to.be.revertedWith("LTV sinirini asiyor");
+        });
+
+        it("Gecerli borc talebinde debt dogru kaydedilmeli", async function () {
+            const borrowAmount = ethers.parseEther("500");
+
+            await lendingPool.connect(user).borrow(mockB.target, mockA.target, borrowAmount);
+
+            expect(await lendingPool.debt(user.address, mockA.target)).to.equal(borrowAmount);
+        });
+
+        it("Borc alinan token kullaniciya gitmeli", async function () {
+            const borrowAmount = ethers.parseEther("500");
+            const before = await mockA.balanceOf(user.address);
+
+            await lendingPool.connect(user).borrow(mockB.target, mockA.target, borrowAmount);
+
+            const after = await mockA.balanceOf(user.address);
+            expect(after - before).to.equal(borrowAmount);
         });
     });
 });
