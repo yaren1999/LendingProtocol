@@ -260,4 +260,45 @@ describe("LendingPool Testleri", function () {
             expect(paid).to.be.above(ethers.parseEther("500"));
         });
     });
+
+    describe("liquidate Testleri", function () {
+
+    beforeEach(async function () {
+        await mockB.mint(user.address, ethers.parseEther("1000"));
+        await mockB.connect(user).approve(lendingPool.target, ethers.MaxUint256);
+        await lendingPool.connect(user).depositCollateral(mockB.target, ethers.parseEther("1000"));
+
+        await priceOracle.setPrice(mockB.target, 100);   
+
+        await mockA.mint(lendingPool.target, ethers.parseEther("50000"));
+        await lendingPool.connect(user).borrow(mockB.target, mockA.target, ethers.parseEther("50000"));
+        
+        await mockA.mint(stranger.address, ethers.parseEther("60000"));
+        await mockA.connect(stranger).approve(lendingPool.target, ethers.MaxUint256);
+    });
+
+    it("Saglikli pozisyon likide edilememeli", async function () {
+        await expect(
+            lendingPool.connect(stranger).liquidate(user.address, mockB.target, mockA.target)
+        ).to.be.revertedWith("Pozisyon saglikli, likidasyon yapilamaz");
+    });
+
+    it("Fiyat dusunce pozisyon likide edilebilir hale gelmeli", async function () {
+        await priceOracle.setPrice(mockB.target, 1);   
+
+        await lendingPool.connect(stranger).liquidate(user.address, mockB.target, mockA.target);
+
+        expect(await lendingPool.debt(user.address, mockA.target)).to.equal(0);
+    });
+
+    it("Likidasyon sonrasi teminat likidatore gecmeli", async function () {
+        await priceOracle.setPrice(mockB.target, 1);
+
+        const before = await mockB.balanceOf(stranger.address);
+        await lendingPool.connect(stranger).liquidate(user.address, mockB.target, mockA.target);
+        const after = await mockB.balanceOf(stranger.address);
+
+        expect(after - before).to.equal(ethers.parseEther("1000"));
+    });
+      });
 });

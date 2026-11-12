@@ -86,4 +86,35 @@ contract LendingPool {
 
         IERC20(_token).transferFrom(msg.sender, address(this), totalDebt);
     }
+
+    function getHealthFactor(address _user, address _collateralToken, address _debtToken) public view returns (uint256) {
+        uint256 collateralAmount = collateral[_user][_collateralToken];
+        uint256 price = priceOracle.getPrice(_collateralToken);
+        uint256 collateralValue = collateralAmount * price;
+
+        uint256 debtAmount = debt[_user][_debtToken];
+        if (debtAmount == 0) {
+            return type(uint256).max;   
+        }
+
+        uint256 adjustedCollateral = (collateralValue * LTV) / 100;
+
+        return (adjustedCollateral * 1e18) / debtAmount;   
+    }
+
+    function liquidate(address _user, address _collateralToken, address _debtToken) external {
+        uint256 healthFactor = getHealthFactor(_user, _collateralToken, _debtToken);
+        require(healthFactor < 1e18, "Pozisyon saglikli, likidasyon yapilamaz");
+
+        uint256 userDebt = debt[_user][_debtToken];
+        require(userDebt > 0, "Borc bulunmuyor");
+
+        uint256 userCollateral = collateral[_user][_collateralToken];
+
+        debt[_user][_debtToken] = 0;
+        collateral[_user][_collateralToken] = 0;
+
+        IERC20(_debtToken).transferFrom(msg.sender, address(this), userDebt);
+        IERC20(_collateralToken).transfer(msg.sender, userCollateral);
+    }
 }
